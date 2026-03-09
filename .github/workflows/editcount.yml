@@ -1,0 +1,94 @@
+name: Wikipedia Edit Counter
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 */12 * * *"
+
+jobs:
+  update-editcount:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Update Wikipedia edit count
+        shell: python
+        env:
+          WIKI_USERNAME: "EditCounter1@MsalmeeenBot"
+          WIKI_PASSWORD: ${{ secrets.WIKI_BOT_PASSWORD }}
+          TARGET_USER: "Msalmeeen"
+          TARGET_PAGE: "مستخدم:Msalmeeen/تعديلاتي"
+          API_URL: "https://ar.wikipedia.org/w/api.php"
+        run: |
+          import json
+          import urllib.parse
+          import urllib.request
+          import http.cookiejar
+
+          cj = http.cookiejar.CookieJar()
+          opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj))
+
+          def get(url, params):
+              full_url = url + "?" + urllib.parse.urlencode(params)
+              with opener.open(full_url) as r:
+                  return json.loads(r.read().decode("utf-8"))
+
+          def post(url, data):
+              encoded = urllib.parse.urlencode(data).encode("utf-8")
+              req = urllib.request.Request(url, data=encoded)
+              with opener.open(req) as r:
+                  return json.loads(r.read().decode("utf-8"))
+
+          API_URL = "https://ar.wikipedia.org/w/api.php"
+          WIKI_USERNAME = "EditCounter1@MsalmeeenBot"
+          import os
+          WIKI_PASSWORD = os.environ["WIKI_PASSWORD"]
+          TARGET_USER = "Msalmeeen"
+          TARGET_PAGE = "مستخدم:Msalmeeen/تعديلاتي"
+
+          login_token = get(API_URL, {
+              "action": "query",
+              "meta": "tokens",
+              "type": "login",
+              "format": "json"
+          })["query"]["tokens"]["logintoken"]
+
+          login_result = post(API_URL, {
+              "action": "login",
+              "lgname": WIKI_USERNAME,
+              "lgpassword": WIKI_PASSWORD,
+              "lgtoken": login_token,
+              "format": "json"
+          })
+
+          if login_result.get("login", {}).get("result") != "Success":
+              raise Exception(f"Login failed: {login_result}")
+
+          editcount_result = get(API_URL, {
+              "action": "query",
+              "meta": "globaluserinfo",
+              "guiuser": TARGET_USER,
+              "guiprop": "editcount",
+              "format": "json"
+          })
+
+          count = str(editcount_result["query"]["globaluserinfo"]["editcount"])
+
+          csrf_token = get(API_URL, {
+              "action": "query",
+              "meta": "tokens",
+              "format": "json"
+          })["query"]["tokens"]["csrftoken"]
+
+          edit_result = post(API_URL, {
+              "action": "edit",
+              "title": TARGET_PAGE,
+              "text": count,
+              "summary": "تحديث تلقائي لعدد التعديلات",
+              "token": csrf_token,
+              "format": "json"
+          })
+
+          if edit_result.get("edit", {}).get("result") != "Success":
+              raise Exception(f"Edit failed: {edit_result}")
+
+          print("Updated edit count to:", count)
