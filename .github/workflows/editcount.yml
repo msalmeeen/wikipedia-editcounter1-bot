@@ -18,18 +18,28 @@ jobs:
           TARGET_USER: "Msalmeeen"
           TARGET_PAGE: "مستخدم:Msalmeeen/تعديلاتي"
           API_URL: "https://ar.wikipedia.org/w/api.php"
+          USER_AGENT: "EditCounter1Bot/1.0 (arwiki user Msalmeeen; GitHub Actions)"
         run: |
           import json
+          import os
           import urllib.parse
           import urllib.request
           import http.cookiejar
 
           cj = http.cookiejar.CookieJar()
-          opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj))
+
+          opener = urllib.request.build_opener(
+              urllib.request.HTTPCookieProcessor(cj)
+          )
+          opener.addheaders = [
+              ("User-Agent", os.environ["USER_AGENT"]),
+              ("Accept", "application/json")
+          ]
 
           def get(url, params):
               full_url = url + "?" + urllib.parse.urlencode(params)
-              with opener.open(full_url) as r:
+              req = urllib.request.Request(full_url)
+              with opener.open(req) as r:
                   return json.loads(r.read().decode("utf-8"))
 
           def post(url, data):
@@ -38,12 +48,11 @@ jobs:
               with opener.open(req) as r:
                   return json.loads(r.read().decode("utf-8"))
 
-          API_URL = "https://ar.wikipedia.org/w/api.php"
-          WIKI_USERNAME = "EditCounter1@MsalmeeenBot"
-          import os
+          API_URL = os.environ["API_URL"]
+          WIKI_USERNAME = os.environ["WIKI_USERNAME"]
           WIKI_PASSWORD = os.environ["WIKI_PASSWORD"]
-          TARGET_USER = "Msalmeeen"
-          TARGET_PAGE = "مستخدم:Msalmeeen/تعديلاتي"
+          TARGET_USER = os.environ["TARGET_USER"]
+          TARGET_PAGE = os.environ["TARGET_PAGE"]
 
           login_token = get(API_URL, {
               "action": "query",
