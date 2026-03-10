@@ -13,12 +13,12 @@ jobs:
       - name: Update Wikipedia edit count
         shell: python
         env:
-          WIKI_USERNAME: "EditCounter1@MsalmeeenBot"
+          WIKI_USERNAME: "EditCounter1@_editcount"
           WIKI_PASSWORD: ${{ secrets.WIKI_BOT_PASSWORD }}
           TARGET_USER: "Msalmeeen"
           TARGET_PAGE: "مستخدم:Msalmeeen/تعديلاتي"
           API_URL: "https://ar.wikipedia.org/w/api.php"
-          USER_AGENT: "EditCounter1Bot/1.0 (arwiki user Msalmeeen; GitHub Actions)"
+          USER_AGENT: "EditCounter1Bot/1.0 (GitHub Actions; updating edit count for Msalmeeen on arwiki)"
         run: |
           import json
           import os
@@ -26,42 +26,48 @@ jobs:
           import urllib.request
           import http.cookiejar
 
-          cj = http.cookiejar.CookieJar()
-
-          opener = urllib.request.build_opener(
-              urllib.request.HTTPCookieProcessor(cj)
-          )
-          opener.addheaders = [
-              ("User-Agent", os.environ["USER_AGENT"]),
-              ("Accept", "application/json")
-          ]
-
-          def get(url, params):
-              full_url = url + "?" + urllib.parse.urlencode(params)
-              req = urllib.request.Request(full_url)
-              with opener.open(req) as r:
-                  return json.loads(r.read().decode("utf-8"))
-
-          def post(url, data):
-              encoded = urllib.parse.urlencode(data).encode("utf-8")
-              req = urllib.request.Request(url, data=encoded)
-              with opener.open(req) as r:
-                  return json.loads(r.read().decode("utf-8"))
-
           API_URL = os.environ["API_URL"]
           WIKI_USERNAME = os.environ["WIKI_USERNAME"]
           WIKI_PASSWORD = os.environ["WIKI_PASSWORD"]
           TARGET_USER = os.environ["TARGET_USER"]
           TARGET_PAGE = os.environ["TARGET_PAGE"]
+          USER_AGENT = os.environ["USER_AGENT"]
 
-          login_token = get(API_URL, {
+          cj = http.cookiejar.CookieJar()
+          opener = urllib.request.build_opener(
+              urllib.request.HTTPCookieProcessor(cj)
+          )
+          opener.addheaders = [
+              ("User-Agent", USER_AGENT),
+              ("Accept", "application/json")
+          ]
+
+          def get(params):
+              url = API_URL + "?" + urllib.parse.urlencode(params)
+              req = urllib.request.Request(url)
+              with opener.open(req) as r:
+                  return json.loads(r.read().decode("utf-8"))
+
+          def post(data):
+              encoded = urllib.parse.urlencode(data).encode("utf-8")
+              req = urllib.request.Request(API_URL, data=encoded)
+              with opener.open(req) as r:
+                  return json.loads(r.read().decode("utf-8"))
+
+          print("Using username:", WIKI_USERNAME)
+          print("Password loaded:", bool(WIKI_PASSWORD))
+          print("Password length:", len(WIKI_PASSWORD))
+
+          login_token_data = get({
               "action": "query",
               "meta": "tokens",
               "type": "login",
               "format": "json"
-          })["query"]["tokens"]["logintoken"]
+          })
 
-          login_result = post(API_URL, {
+          login_token = login_token_data["query"]["tokens"]["logintoken"]
+
+          login_result = post({
               "action": "login",
               "lgname": WIKI_USERNAME,
               "lgpassword": WIKI_PASSWORD,
@@ -69,10 +75,12 @@ jobs:
               "format": "json"
           })
 
+          print("Login result:", login_result)
+
           if login_result.get("login", {}).get("result") != "Success":
               raise Exception(f"Login failed: {login_result}")
 
-          editcount_result = get(API_URL, {
+          editcount_result = get({
               "action": "query",
               "meta": "globaluserinfo",
               "guiuser": TARGET_USER,
@@ -81,23 +89,47 @@ jobs:
           })
 
           count = str(editcount_result["query"]["globaluserinfo"]["editcount"])
+          print("Current edit count:", count)
 
-          csrf_token = get(API_URL, {
+          csrf_result = get({
               "action": "query",
               "meta": "tokens",
               "format": "json"
-          })["query"]["tokens"]["csrftoken"]
-
-          edit_result = post(API_URL, {
-              "action": "edit",
-              "title": TARGET_PAGE,
-              "text": count,
-              "summary": "تحديث تلقائي لعدد التعديلات",
-              "token": csrf_token,
-              "format": "json"
           })
 
-          if edit_result.get("edit", {}).get("result") != "Success":
-              raise Exception(f"Edit failed: {edit_result}")
+          csrf_token = csrf_result["query"]["tokens"]["csrftoken"]
 
-          print("Updated edit count to:", count)
+          current_page_result = get({
+              "action": "query",
+              "prop": "revisions",
+              "rvprop": "content",
+              "titles": TARGET_PAGE,
+              "format": "json",
+              "formatversion": "2"
+          })
+
+          pages = current_page_result["query"]["pages"]
+          current_text = ""
+          if pages and "revisions" in pages[0]:
+              current_text = pages[0]["revisions"][0]["content"].strip()
+
+          print("Current page text:", current_text)
+
+          if current_text == count:
+              print("No change needed.")
+          else:
+              edit_result = post({
+                  "action": "edit",
+                  "title": TARGET_PAGE,
+                  "text": count,
+                  "summary": "تحديث تلقائي لعدد التعديلات",
+                  "token": csrf_token,
+                  "format": "json"
+              })
+
+              print("Edit result:", edit_result)
+
+              if edit_result.get("edit", {}).get("result") != "Success":
+                  raise Exception(f"Edit failed: {edit_result}")
+
+              print("Updated edit count to:", count)
