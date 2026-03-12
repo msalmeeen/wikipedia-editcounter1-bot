@@ -3,7 +3,7 @@ name: Wikipedia Edit Counter
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 */4 * * *"
+    - cron: "0 20 * * *"
 
 jobs:
   update-editcount:
